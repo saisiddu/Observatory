@@ -1,5 +1,5 @@
 # Observatory
-Tools for observing the terrestrial and aquatic surfaces of earth 
+Tools for observing the terrestrial and aquatic surfaces of Earth 
 
 “Use only that which works, and take it from any place you can find it.” Bruce Lee
 
