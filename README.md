@@ -7,7 +7,7 @@ An observatory is a location used for observing terrestrial or celestial events 
 
 This repository is intended for the sharing and distribution of open-source Python based code useful for model and data integration that improves access to large datasets, reduces computational burden, reinvent the wheel less often, and share and communicate more about how to synthesize earth surface observations in useful ways.
 
-# Jim's shine rocks on the floor
+# Jim's shiny rocks on the floor
 0) Make a fork of ChristinaB/Observatory
 1) In HydroShare, get to JupyterHub and open up a terminal instance.
 2) Change the working directory to notebooks
