@@ -7,28 +7,28 @@ An observatory is a location used for observing terrestrial or celestial events 
 
 This repository is intended for the sharing and distribution of open-source Python based code useful for model and data integration that improves access to large datasets, reduces computational burden, reinvent the wheel less often, and share and communicate more about how to synthesize earth surface observations in useful ways.
 
-## Sai's experience working with git-versioned-folder in hydroshare
+# Sai's experience working with git-versioned-folder in hydroshare
 0) Make a fork of ChristinaB/Observatory
 1) In HydroShare, get to JupyterHub and open up a terminal instance.
 2) Change the working directory to notebooks/utilities
-# If you haven't cloned this repository into Hydroshare yet:
+## If you haven't cloned this repository into Hydroshare yet:
 3) type/copy in "git clone <github link>" that is available from your fork (eg., https://github.com/username/Observatory.git)
 4) then type in your github username and password to then download the git clone.
   $ git config --global user.name "your git username"
   $ git config --global user.email "your email that you used to setup the git account"
 5) you should now have notebooks/utilities/Observatory subdirectory with this README.md and the observatory_gridded_hydrometeorology.py (OGH) within.
-# If you have previously cloned the git folder to notebooks/utilities, update this to the latest file
+## If you have previously cloned the git folder to notebooks/utilities, update this to the latest file
 3) Change the working directory to notebooks/utilities/Observatory
 4) Pull the latest (your updated fork - pull from ChristinaB/Observatory master, before you do this) files from the repository
   $ git pull
 5) you should now have notebooks/utilities/Observatory subdirectory that matches your fork on github.com (which should match ChristinaB/Observatory - if you pulled from the master)
-# Either way:
+## Either way:
 6) Change the working directory to notebooks/utilities/Observatory
 7) Copy observatory_gridded_hydromet.py to notebooks/utilities/
   $ cp observatory_gridded_hydromet.py ../
   Now, the file '/notebooks/utilities/observatory_gridded_hydromet.py' is updated to the latest state (from git) 
 
-# Saving changes back to git repository
+## Saving changes back to git repository
 
 8) Work on the file and save the changes.
 9) Change the working directory to '/notebooks/utilities'
