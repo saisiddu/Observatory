@@ -1,4 +1,3 @@
-# Sai test 2 - 07Sep17 - from notebook
 # Import python modules
 import os
 import sys
@@ -26,81 +25,56 @@ import wget
 import bz2
 from bs4 import BeautifulSoup as bs
 
-print 'Version 8/24/17 4:28  cb'
+print 'Version 9/8/17 5:36  cb'
 
-# looping through each polygon
+
 def getFullShape(shapefile):
-    with fiona.open(shapefile) as read_shape:
-        # loop thru the stack
-        mp = [shape(pol['geometry']) for pol in read_shape]
-        
-        # close shapefile connection
-        read_shape.close()
-                
-        # assimilate objects
-        mp = MultiPolygon(mp)
-        return(mp)
+    """
+    Generate a MultiPolygon to represent each shape/polygon within the shapefile
+    """
+    shp = fiona.open(shapefile)
+    mp = [shape(pol['geometry']) for pol in shp]
+    mp = MultiPolygon(mp)
+    shp.close()
+    return(mp)
     
-# taking the bounds metadata of the multipolygon shapefile
+    
 def getShapeBbox(polygon):
+    """
+    Generate a geometric box to represent the bounding box for the polygon, shapefile connection, or MultiPolygon
+    """
     # identify the cardinal bounds
     minx, miny, maxx, maxy = polygon.bounds
     bbox = box(minx, miny, maxx, maxy, ccw=True)
     return(bbox)
 
-# defined function for reading in shapefile info
-def readShapefileTable(shapefile, colnames):
-    # read the data from the shapefile
-    with fiona.open(shapefile) as f:
-        centroid = [eachpol['properties'].values() for eachpol in f]
-                
-        # convert the ordered list to a dataframe
-        cent_df = pd.DataFrame(centroid, columns=colnames)
-        f.close()
+
+def readShapefileTable(shapefile):
+    """
+    read in the datatable captured within the shapefile properties
+    """
+    shp = fiona.open(shapefile)
+    centroid = [eachpol['properties'] for eachpol in shp]
+    cent_df = pd.DataFrame.from_dict(centroid, orient='columns')
+    shp.close()
     return(cent_df)
 
-# filter for datafiles that can be used
-def filterPointsinShape_fromweb(shape, points_lat, points_lon, buffer_distance=0.5, buffer_resolution=16):
+def filterPointsinShape(shape, 
+                        points_lat, points_lon, points_elev=None, 
+                        buffer_distance=0.06, buffer_resolution=16, labels=['LAT', 'LONG_', 'ELEV']):
+    """
+    filter for datafiles that can be used
+    """
     # add buffer region
     region = shape.buffer(buffer_distance, resolution=buffer_resolution)
     
-    # initiate list object
+    # Intersection each coordinate with the region
     limited_list = []
-    
-    # loop through each coordinate
-    for lon, lat in zip(points_lon, points_lat):
-        # produce point
-        gpoint = point.Point(lon, lat)
-
-        # Intersection test
-        if gpoint.intersects(region):
-            limited_list.append([lon, lat])
-
-    labels = ['LONG_', 'LAT']
-    maptable = pd.DataFrame.from_records(limited_list, columns = labels)
-    print('Number of gridded points/files: '+ str(len(maptable)))
-    return(maptable)
-
-
-# filter for datafiles that can be used
-def filterPointsinShape(shape, points_lat, points_lon, points_elev=None, buffer_distance=0.5, buffer_resolution=16):
-    # add buffer region
-    region = shape.buffer(buffer_distance, resolution=buffer_resolution)
-    
-    # initiate list object
-    limited_list = []
-    
-    # loop through each coordinate
     for lon, lat, elev in zip(points_lon, points_lat, points_elev):
-        # produce point
         gpoint = point.Point(lon, lat)
-
-        # Intersection test
         if gpoint.intersects(region):
-            limited_list.append([lon, lat, elev])
-
-    labels = ['LONG_', 'LAT', 'ELEV']
-    maptable = pd.DataFrame.from_records(limited_list, columns = labels)
+            limited_list.append([lat, lon, elev])
+    maptable = pd.DataFrame.from_records(limited_list, columns=labels)
     print('Number of gridded points/files: '+ str(len(maptable)))
     return(maptable)
 
@@ -138,8 +112,11 @@ def scrapeurl(url, startswith=None, hasKeyword=None):
     temp['Lat'] = temp.Lat.astype(float)
     return(temp)
 
-def treatgeoself(shapefile, NAmer, Webservice, file_prefix='data_', folder_path=os.getcwd(), outfilename='monkeysonatree.csv', buffer_distance=0.06):
+
+def treatgeoself(shapefile, NAmer, folder_path=os.getcwd(), outfilename='monkeysonatree.csv', buffer_distance=0.06):
     """
+    TreatGeoSelf to some [data] lovin'!
+    
     :param shapefile:
     :param Namer:
     :param Webservice:
@@ -150,21 +127,19 @@ def treatgeoself(shapefile, NAmer, Webservice, file_prefix='data_', folder_path=
     """
     
     # read shapefile into a multipolygon shape-object
-    Shape = getFullShape(shapefile)
+    shape_mp = getFullShape(shapefile)
 
     # read in the North American continental DEM points for the station elevations
-    NAmer_datapoints = readShapefileTable(NAmer, colnames=['Lat','Lon','Elev'])
-
-    # scrape the webservice to compile the files available and their longitude/latitude values
-    Web_datapoints = scrapeurl(Webservice, startswith=file_prefix).merge(NAmer_datapoints, on=['Lat','Lon'], how='inner')
-
-    # Sample datafiltering 3
-    maptable = filterPointsinShape(Shape, 
-                                   points_lat=Web_datapoints.Lat, 
-                                   points_lon=Web_datapoints.Lon, 
-                                   points_elev=Web_datapoints.Elev, 
+    NAmer_datapoints = readShapefileTable(NAmer).rename(columns={'Lat':'LAT','Long':'LONG_','Elev':'ELEV'})
+    
+    # generate maptable
+    maptable = filterPointsinShape(shape_mp,
+                                   points_lat=NAmer_datapoints.LAT,
+                                   points_lon=NAmer_datapoints.LONG_,
+                                   points_elev=NAmer_datapoints.ELEV,
                                    buffer_distance=buffer_distance,
-                                   buffer_resolution=16)
+                                   buffer_resolution=16,
+                                   labels=['LAT', 'LONG_', 'ELEV'])
     maptable.reset_index(inplace=True)
     maptable = maptable.rename(columns={"index":"FID"})
     print(maptable.shape)
@@ -174,7 +149,6 @@ def treatgeoself(shapefile, NAmer, Webservice, file_prefix='data_', folder_path=
     mappingfile=os.path.join(folder_path, outfilename)
     maptable.to_csv(mappingfile, sep=',', header=True, index=False)
     return mappingfile
-
 
 # ## Define internal operations for downloading data
 
@@ -1147,7 +1121,7 @@ def plotPavg(dictionary, loc_name, start_date, end_date):
     plt.savefig('avg_monthly_precip'+str(loc_name)+'.png')
     plt.show()
     
-def gridclim_dict(gridclim_folder,
+def sand_between_your_toes(gridclim_folder,
                   gridclimname,
                   loc_name,
                   mappingfile,
@@ -1388,7 +1362,7 @@ def monthlyBiasCorrection_deltaTratioP_Livneh_METinput(homedir, mappingfile, Bia
     print('this device will now self-destruct.')
     print('just kidding.')
     
-def monthlyBiasCorrection_WRFlongtermmean_elevationbins_METinput(homedir,
+def makebelieve_global(homedir,
                                                  mappingfile,
                                                  BiasCorr,
                                                  lowrange='0to1000m', LowElev=range(0,1000),
