@@ -7,7 +7,7 @@ An observatory is a location used for observing terrestrial or celestial events 
 
 This repository is intended for the sharing and distribution of open-source Python based code useful for model and data integration that improves access to large datasets, reduces computational burden, reinvent the wheel less often, and share and communicate more about how to synthesize earth surface observations in useful ways.
 
-# Sai's experience working with git-versioned-folder in hydroshare
+# Work with a git-versioned-folder in hydroshare to develop your own Utilities
 0) Make a fork of ChristinaB/Observatory
 1) In HydroShare, get to JupyterHub and open up a terminal instance.
 2) Change the working directory to notebooks/utilities
@@ -35,9 +35,13 @@ This repository is intended for the sharing and distribution of open-source Pyth
 10) Copy the modified file back to git versioned folder
   $ cp 'observatory_gridded_hydromet.py' Observatory/
 11) Change the working directory to '/notebooks/utilities/Observatory'
-12) Commit the changes
+12) Check file changes 
+$ git status
+13) Commit the changes
   $ git add observatory_gridded_hydromet.py
   $ git commit -m 'Add message to describe these changes, if any'
   $ git push
+14) Check that the files changed
+ $ git status
 
  

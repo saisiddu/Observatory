@@ -25,7 +25,7 @@ import wget
 import bz2
 from bs4 import BeautifulSoup as bs
 
-print 'Version 9/8/17 5:36  cb'
+print('Version '+datetime.fromtimestamp(os.path.getmtime('ogh.py')).strftime('%Y-%m-%d %H:%M:%S')+' jp')
 
 
 def getFullShape(shapefile):
@@ -59,6 +59,7 @@ def readShapefileTable(shapefile):
     shp.close()
     return(cent_df)
 
+
 def filterPointsinShape(shape, 
                         points_lat, points_lon, points_elev=None, 
                         buffer_distance=0.06, buffer_resolution=16, labels=['LAT', 'LONG_', 'ELEV']):
@@ -79,37 +80,24 @@ def filterPointsinShape(shape,
     return(maptable)
 
 
-# scrape the datafiles from a url of interest
-def scrapeftp(url):
-    # grab the html of the ftp url
-    page = urllib2.urlopen(url).readlines()
-        
-    # grapple each line for the filename segment on the right side
-    filenames = [eachline.replace('\r\n','').rsplit(' ',1)[1] for eachline in page]
-
-    # separate the lon and lat points from the filename
-    lonlat = [eachfile.replace('.bz2','').rsplit('_',2) for eachfile in filenames]
-    filename_df = pd.DataFrame.from_records(lonlat, columns = ['prefix','LONG_','LAT'])
-    return(filename_df)
-
-# scrape the datafiles from a url of interest
 def scrapeurl(url, startswith=None, hasKeyword=None):
+    """
+    scrape the gridded datafiles from a url of interest
+    """
     # grab the html of the url, and prettify the html structure
     page = urllib2.urlopen(url).read()
     page_soup = bs(page, 'lxml')
     page_soup.prettify()
 
     # loop through and filter the hyperlinked lines
-    if startswith is not None:
-        temp = [anchor['href'] for anchor in page_soup.findAll('a', href=True) if anchor['href'].startswith(startswith)]
-    else:
+    if startswith is None:
         temp = [anchor['href'] for anchor in page_soup.findAll('a', href=True) if hasKeyword in anchor['href']]
+    else:
+        temp = [anchor['href'] for anchor in page_soup.findAll('a', href=True) if anchor['href'].startswith(startswith)]
 
-    # convert to dataframe then separate the lon and lat coordinate values
+    # convert to dataframe then separate the lon and lat as float coordinate values
     temp = pd.DataFrame(temp, columns = ['filenames'])
-    temp[['filetype','Lat','Lon']] = temp['filenames'].apply(lambda x: pd.Series(str(x).rsplit('_', 2)))
-    temp['Lon'] = temp.Lon.astype(float)
-    temp['Lat'] = temp.Lat.astype(float)
+    temp[['LAT','LONG_']] = temp['filenames'].apply(lambda x: pd.Series(str(x).rsplit('_', 2))[1:3]).astype(float)
     return(temp)
 
 
@@ -150,228 +138,193 @@ def treatgeoself(shapefile, NAmer, folder_path=os.getcwd(), outfilename='monkeys
     maptable.to_csv(mappingfile, sep=',', header=True, index=False)
     return mappingfile
 
-# ## Define internal operations for downloading data
 
 def mapContentFolder(resid):
+    """
+    map the content folder within HydroShare
+    """
     path = os.path.join('/home/jovyan/work/notebooks/data', str(resid), str(resid), 'data/contents')
     return path
 
 
-# read in reference locations
-def read_in_longlats(mappingfile):
-    maptable=[]
-    with open(mappingfile, 'rb') as csvfile:
-        longlat = csv.reader(csvfile, delimiter=',')
-        for row in longlat:
-            maptable.append(row)
-    csvfile.close()
-    return(maptable)
-
 # ### CIG (DHSVM)-oriented functions
 
-# index and extract longitude and latitude points
+
 def compile_bc_Livneh2013_locations(maptable):
-    # index the lat long fields
-    latitude=maptable[0].index('LAT')
-    longitude=maptable[0].index('LONG_')
+    """
+    compile a list of file URLs for bias corrected Livneh et al. 2013 (CIG)
+    """
+    locations=[]
+    for ind, row in maptable.iterrows():
+        basename='_'.join(['data', str(row['LAT']), str(row['LONG_'])])
+        url=['http://cses.washington.edu/rocinante/Livneh/bcLivneh_WWA_2013/forcings_ascii/',basename]
+        locations.append(''.join(url))
+    return locations2013
 
-    # compile a list of file urls for Livneh et al. 2013 (CIG)
-    locations2013=[]
-    for row in maptable:
-        if maptable.index(row)!=0:
-            basename='_'.join(['data',row[latitude], row[longitude]])
-            url=['http://cses.washington.edu/rocinante/Livneh/bcLivneh_WWA_2013/forcings_ascii/',basename]
-            locations2013.append(''.join(url))
-    return(locations2013)
 
-# index and extract longitude and latitude points
 def compile_Livneh2013_locations(maptable):
-    # index the lat long fields
-    latitude=maptable[0].index('LAT')
-    longitude=maptable[0].index('LONG_')
-
-    # compile a list of lats and longs for Livneh 2013
-    locations2013=[]
-    for row in maptable:
-        if maptable.index(row)!=0:
-            basename='_'.join(['data',row[latitude], row[longitude]])
-            url=['http://www.cses.washington.edu/rocinante/Livneh/Livneh_WWA_2013/forcs_dhsvm/',basename]
-            locations2013.append(''.join(url))
-    return(locations2013)
+    """
+    compile a list of file URLs for Livneh et al. 2013 (CIG)
+    """
+    locations=[]
+    for ind, row in maptable.iterrows():
+        basename='_'.join(['data', str(row['LAT']), str(row['LONG_'])])
+        url=['http://www.cses.washington.edu/rocinante/Livneh/Livneh_WWA_2013/forcs_dhsvm/',basename]
+        locations.append(''.join(url))
+    return locations
 
 
-# ### VIC-oriented functions
+### VIC-oriented functions
 
-# In[3]:
 
-# compile file URLs
 def compile_VICASCII_Livneh2015_locations(maptable):
-    # index the lat long fields
-    latitude=maptable[0].index('LAT')
-    longitude=maptable[0].index('LONG_')
-    
-    # compile the VIC.ASCII data from Livneh 2016
-    locations2015=[]
-    for row in maptable:
-        if maptable.index(row)!=0:
-            loci='_'.join(['Fluxes_Livneh_NAmerExt_15Oct2014',row[latitude], row[longitude]])
-            url=["ftp://192.12.137.7/pub/dcp/archive/OBS/livneh2014.1_16deg/VIC.ASCII/latitude.",row[latitude],'/',loci,'.bz2']
-            locations2015.append(''.join(url))
-    return(locations2015)
+    """
+    compile the list of file URLs for Livneh et al., 2015 VIC.ASCII outputs
+    """
+    locations=[]
+    for ind, row in maptable.iterrows():
+        loci='_'.join(['Fluxes_Livneh_NAmerExt_15Oct2014', str(row['LAT']), str(row['LONG_'])])
+        url=["ftp://192.12.137.7/pub/dcp/archive/OBS/livneh2014.1_16deg/VIC.ASCII/latitude.",str(row['LAT']),'/',loci,'.bz2']
+        locations.append(''.join(url))
+    return locations
 
-# compile file URLs
+
 def compile_VICASCII_Livneh2013_USA_locations(maptable):
-    # index the lat long fields
-    latitude=maptable[0].index('LAT')
-    longitude=maptable[0].index('LONG_')
-    
-    # compile the VIC.ASCII data from Livneh 2013
-    locations2013=[]
-    for row in maptable:
-        if maptable.index(row)!=0:
-
-            loci='_'.join(['VIC_fluxes_Livneh_CONUSExt_v.1.2_2013',row[latitude], row[longitude]])
-            url=["ftp://ftp.hydro.washington.edu/pub/blivneh/CONUS/Fluxes.asc.v.1.2.1915.2011.bz2/fluxes.125.120.37.49/",loci,".bz2"]
-            locations2013.append(''.join(url))
-    return(locations2013)
+    """
+    compile the list of file URLs for Livneh et al., 2013 VIC.ASCII outputs for the USA
+    """
+    locations=[]
+    for ind, row in maptable.iterrows():
+        loci='_'.join(['VIC_fluxes_Livneh_CONUSExt_v.1.2_2013', str(row['LAT']), str(row['LONG_'])])
+        url=["ftp://ftp.hydro.washington.edu/pub/blivneh/CONUS/Fluxes.asc.v.1.2.1915.2011.bz2/fluxes.125.120.37.49/",loci,".bz2"]
+        locations.append(''.join(url))
+    return locations
 
 
 def compile_VICASCII_Livneh2013_CAN_locations(maptable):
-    # index the lat long fields
-    latitude=maptable[0].index('LAT')
-    longitude=maptable[0].index('LONG_')
-    
-    # compile the VIC.ASCII data from Livneh 2013
-    locations2013=[]
-    for row in maptable:
-        if maptable.index(row)!=0:
-
-            loci='_'.join(['VIC_fluxes_Livneh_CONUSExt_v.1.2_2013',row[latitude], row[longitude]])
-            url=["ftp://ftp.hydro.washington.edu/pub/blivneh/CONUS/Fluxes.asc.v.1.2.1915.2011.bz2/fluxes.canada.columbia/",loci,".bz2"]
-            locations2013.append(''.join(url))
-    return(locations2013)
+    """
+    compile the list of file URLs for Livneh et al., 2013 VIC.ASCII outputs for Canada
+    """
+    locations=[]
+    for ind, row in maptable.iterrows():
+        loci='_'.join(['VIC_fluxes_Livneh_CONUSExt_v.1.2_2013', str(row['LAT']), str(row['LONG_'])])
+        url=["ftp://ftp.hydro.washington.edu/pub/blivneh/CONUS/Fluxes.asc.v.1.2.1915.2011.bz2/fluxes.canada.columbia/",loci,".bz2"]
+        locations.append(''.join(url))
+    return locations
 
 
-# ### Climate (Meteorological observations)-oriented functions
+### Climate (Meteorological observations)-oriented functions
 
-# In[ ]:
 
-# index and extract longitude and latitude points for Livneh 2013
 def compile_dailyMET_Livneh2013_locations(maptable):
-    # index the lat long fields
-    latitude=maptable[0].index('LAT')
-    longitude=maptable[0].index('LONG_')
-    
-    # compile the daily MET data from Livneh 2013
-    locations2013=[]
-    for row in maptable:
-        if maptable.index(row)!=0:
-            loci='_'.join(['Meteorology_Livneh_CONUSExt_v.1.2_2013',row[latitude], row[longitude]])
-            url=["ftp://ftp.hydro.washington.edu/pub/blivneh/CONUS/Meteorology.asc.v.1.2.1915.2011.bz2/data.125.120.37.49/",loci,".bz2"]
-            locations2013.append(''.join(url))
-    return(locations2013)
+    """
+    compile the list of file URLs for Livneh et al., 2013 Daily Meteorology data
+    """
+    locations=[]
+    for ind, row in maptable.iterrows():
+        loci='_'.join(['Meteorology_Livneh_CONUSExt_v.1.2_2013', str(row['LAT']), str(row['LONG_'])])
+        url=["ftp://ftp.hydro.washington.edu/pub/blivneh/CONUS/Meteorology.asc.v.1.2.1915.2011.bz2/data.125.120.37.49/",loci,".bz2"]
+        locations.append(''.join(url))
+    return locations
 
-# index and extract longitude and latitude points for Livneh 2016
+
 def compile_dailyMET_Livneh2015_locations(maptable):
-    # index the lat long fields
-    latitude=maptable[0].index('LAT')
-    longitude=maptable[0].index('LONG_')
-
-    # compile the daily data for Livneh 2016
-    locations2015=[]
-    for row in maptable:
-        if maptable.index(row)!=0:
-            loci='_'.join(['Meteorology_Livneh_NAmerExt_15Oct2014',row[latitude], row[longitude]])
-            url=["ftp://192.12.137.7/pub/dcp/archive/OBS/livneh2014.1_16deg/ascii/daily/latitude.",row[latitude],"/",loci,".bz2"]
-            locations2015.append(''.join(url))
-    return(locations2015)
+    """
+    compile the list of file URLs for Livneh et al., 2015 Daily Meteorology data
+    """
+    locations=[]
+    for ind, row in maptable.iterrows():
+        loci='_'.join(['Meteorology_Livneh_NAmerExt_15Oct2014', str(row['LAT']), str(row['LONG_'])])
+        url=["ftp://192.12.137.7/pub/dcp/archive/OBS/livneh2014.1_16deg/ascii/daily/latitude.", str(row['LAT']),"/",loci,".bz2"]
+        locations.append(''.join(url))
+    return locations
 
 
 # ### WRF-oriented functions
 
-# compile file URLs  
 
-# index and extract longitude and latitude points for raw WRF NNRP
 def compile_wrfnnrp_raw_Salathe2014_locations(maptable):
-    # index the lat long fields
-    latitude=maptable[0].index('LAT')
-    longitude=maptable[0].index('LONG_')
+    """
+    compile a list of file URLs for Salathe et al., 2014 raw WRF NNRP data
+    """
+    locations=[]
+    for ind, row in maptable.iterrows():
+        basename='_'.join(['data', str(row['LAT']), str(row['LONG_'])])
+        url=['http://cses.washington.edu/rocinante/WRF/NNRP/vic_16d/WWA_1950_2010/raw/forcings_ascii/',basename]
+        locations.append(''.join(url))
+    return locations
 
-    # compile a list of file urls for Livneh et al. 2013 (CIG)
-    locations2014=[]
-    for row in maptable:
-        if maptable.index(row)!=0:
-            basename='_'.join(['data',row[latitude], row[longitude]])
-            url=['http://cses.washington.edu/rocinante/WRF/NNRP/vic_16d/WWA_1950_2010/raw/forcings_ascii/',basename]
-            locations2014.append(''.join(url))
-    return(locations2014)
 
-# index and extract longitude and latitude points for bc WRF NNRP
 def compile_wrfnnrp_bc_Salathe2014_locations(maptable):
-    # index the lat long fields
-    latitude=maptable[0].index('LAT')
-    longitude=maptable[0].index('LONG_')
-
-    # compile a list of file urls for Livneh et al. 2013 (CIG)
-    locations2014=[]
-    for row in maptable:
-        if maptable.index(row)!=0:
-            basename='_'.join(['data',row[latitude], row[longitude]])
-            url=['http://cses.washington.edu/rocinante/WRF/NNRP/vic_16d/WWA_1950_2010/bc/forcings_ascii/',basename]
-            locations2014.append(''.join(url))
-    return(locations2014)
+    """
+    compile a list of file URLs for the Salathe et al., 2014 bias corrected WRF NNRP data
+    """
+    locations=[]
+    for ind, row in maptable.iterrows():
+        basename='_'.join(['data', str(row['LAT']), str(row['LONG_'])])
+        url=['http://cses.washington.edu/rocinante/WRF/NNRP/vic_16d/WWA_1950_2010/bc/forcings_ascii/',basename]
+        locations.append(''.join(url))
+    return locations
 
 
 # ## Data file migration functions
 
-# In[15]:
 
-# check if the destination folder directory exists; if not, create it
 def ensure_dir(f):
+    """
+    check if the destination folder directory exists; if not, create it and set it as the working directory
+    """
     if not os.path.exists(f):
         os.makedirs(f)
     os.chdir(f)
 
-# Download the livneh 2013 files to the livneh2013 subdirectory
+
 def wget_download(listofinterest):
-           
+    """
+    Download files from an http domain
+    """
     # check and download each location point, if it doesn't already exist in the download directory
     for fileurl in listofinterest:
-        basename=os.path.basename(fileurl)
-        filename=os.path.join(os.getcwd(), basename) # file location on the local directory
-        if os.path.isfile(filename):
-            print('file already exists: ' + basename)
-            continue
+        basename = os.path.basename(fileurl)
         try:
             wget.download(fileurl)
-            wget.close()
             print('downloaded: ' + basename)
         except:
             print('File does not exist at this URL: ' + basename)
-        
+
 # Download the livneh 2013 files to the livneh2013 subdirectory
 def wget_download_one(fileurl):
+    """
+    Download a file from an http domain
+    """
     # check and download each location point, if it doesn't already exist in the download directory
     basename=os.path.basename(fileurl)
-    filename=os.path.join(os.getcwd(), basename) # file location on the local directory
-    if os.path.isfile(filename):
-        print('file already exists: ' + basename)
-    else:
-        try:
-            wget.download(fileurl)
-            print('downloaded: ' + basename)
-        except:
-            print('File does not exist at this URL: ' + basename)
     
-def wget_download_p(listofinterest):
+    # if it exists, remove for new download (overwrite mode)
+    if os.path.isfile(basename):
+        os.remove(basename)
+        
+    try:
+        wget.download(fileurl)
+        print('downloaded: ' + basename)
+    except:
+        print('File does not exist at this URL: ' + basename)
+    
+def wget_download_p(listofinterest, nworkers=20):
+    """
+    Download files from an http domain in parallel
+    """
     from multiprocessing import Pool
-    pool = Pool(10) # submit 10 at once
+    pool = Pool(int(nworkers))
     pool.map(wget_download_one, listofinterest)
     pool.close()
     pool.terminate()
 
-# Download and decompress the livneh 2016 files
+
 def ftp_download(listofinterest):
+    """
+    Download and decompress files from an ftp domain
+    """
     for loci in listofinterest:
         
         # establish path info
@@ -380,10 +333,6 @@ def ftp_download(listofinterest):
         path=os.path.dirname(fileurl.split('/',1)[1]) # folder path
         filename=os.path.basename(fileurl) # filename
         
-        if os.path.isfile(filename):
-            print('file already exists')
-            continue
-        
         # download the file from the ftp server
         ftp=ftplib.FTP(ipaddress)
         ftp.login()
@@ -395,43 +344,50 @@ def ftp_download(listofinterest):
             # decompress the file
             decompbz2(filename)
         except:
+            os.remove(filename)
             print('File does not exist at this URL: '+fileurl)
         
         
-
-# Download and decompress the livneh 2016 files
 def ftp_download_one(loci):
+    """
+    Download and decompress a file from an ftp domain
+    """
     # establish path info
     fileurl=loci.replace('ftp://','') # loci is already the url with the domain already appended
     ipaddress=fileurl.split('/',1)[0] # ip address
     path=os.path.dirname(fileurl.split('/',1)[1]) # folder path
     filename=os.path.basename(fileurl) # filename
         
-    if os.path.isfile(filename):
-        print('file already exists')
-    else:        
-        # download the file from the ftp server
-        ftp=ftplib.FTP(ipaddress)
-        ftp.login()
-        ftp.cwd(path)
-        try:
-            ftp.retrbinary("RETR " + filename ,open(filename, 'wb').write)
-            ftp.close()
-            
-            # decompress the file
-            decompbz2(filename)
-        except:
-            print('File does not exist at this URL: '+fileurl)
+    # download the file from the ftp server
+    ftp=ftplib.FTP(ipaddress)
+    ftp.login()
+    ftp.cwd(path)
+    try:
+        ftp.retrbinary("RETR " + filename ,open(filename, 'wb').write)
+        ftp.close()
+        
+        # decompress the file
+        decompbz2(filename)
+    except:
+        os.remove(filename)
+        print('File does not exist at this URL: '+fileurl)
 
-def ftp_download_p(listofinterest):
+        
+def ftp_download_p(listofinterest, nworkers=20):
+    """
+    Download and decompress files from an ftp domain in parallel
+    """
     from multiprocessing import Pool
-    pool = Pool(10) # submit 10 at once
+    pool = Pool(int(nworkers))
     pool.map(ftp_download_one, listofinterest)
     pool.close()
     pool.terminate()
     
-# unzip the file
+
 def decompbz2(filename):
+    """
+    Extract a file from a bz2 file of the same name, then remove the bz2 file
+    """
     with open(filename.split(".bz2",1)[0], 'wb') as new_file, open(filename, 'rb') as zipfile:
         decompressor = bz2.BZ2Decompressor()
         for data in iter(lambda : zipfile.read(100 * 1024), b''):
@@ -442,239 +398,341 @@ def decompbz2(filename):
     print(os.path.splitext(filename)[0] + ' unzipped')
 
 
-# ## Wrapper scripts
+def catalogfiles(folderpath):
+    """
+    make a catalog of the gridded files within a folderpath
+    """
+    # read in downloaded files
+    temp = [eachfile for eachfile in os.listdir(folderpath) if not os.path.isdir(eachfile)]
+    if len(temp)==0:
+        # no files were available; setting default catalog output structure
+        catalog = pd.DataFrame([], columns=['filenames','LAT','LONG_'])
+    else:
+        # create the catalog dataframe and extract the filename components
+        catalog = pd.DataFrame(temp, columns=['filenames'])
+        catalog[['LAT','LONG_']] = catalog['filenames'].apply(lambda x: pd.Series(str(x).rsplit('_',2))[1:3]).astype(float)
 
-# ### Get Daily Meteorological data from Livneh 2013
+        # convert the filenames column to a filepath
+        catalog['filenames'] = catalog['filenames'].apply(lambda x: os.path.join(folderpath, x))
+    return catalog
 
-# read in the longitude and latitude points from the reference mapping file
-def getClimateData_DailyVIC_USA_livneh2013(homedir, mappingfile):
+
+def addCatalogToMap(outfilepath, maptable, folderpath, catalog_label):
+    """
+    Update the mappingfile with a new column, a vector of filepaths for the downloaded files
+    """
+    
+    # assert catalog_label as a string-object
+    catalog_label = str(catalog_label)
+    
+    # catalog the folder directory
+    catalog = catalogfiles(folderpath).rename(columns={'filenames':catalog_label})
+    
+    # drop existing column and update with a vector for the catalog of files
+    if catalog_label in maptable.columns:
+        maptable = maptable.drop(catalog_label, 1)
+    maptable = maptable.merge(catalog, on=['LAT','LONG_'], how='left')
+    maptable.to_csv(outfilepath, header=True, index=False)
+
+    
+# Wrapper scripts
+
+
+def getClimateData_DailyMET_livneh2013(homedir, mappingfile, subdir='livneh2013/Daily_MET_1915_2011', catalog_label='livneh2013_MET'):
+    """
+    Get the Livneh el al., 2013 Daily Meteorology files of interest using the reference mapping file
+    """
+    # check and generate DailyMET livneh 2013 data directory
+    filedir=os.path.join(homedir, subdir)
+    ensure_dir(filedir)
     
     # generate table of lats and long coordinates
-    maptable = read_in_longlats(mappingfile)
+    maptable = pd.read_csv(mappingfile)
     
     # compile the longitude and latitude points
-    dailyVIClocations2013 = compile_VICASCII_Livneh2013_USA_locations(maptable)
+    locations = compile_dailyMET_Livneh2013_locations(maptable)
 
-    # check and generate VIC_ASCII Flux model livneh 2016 data directory
-    filedir=homedir+'/livneh2013/Daily_VIC_1915_2011/'
-    ensure_dir(filedir)
+    # Download the files
+    ftp_download_p(locations)
+    
+    # update the mappingfile with the file catalog
+    addCatalogToMap(outfilepath=mappingfile, maptable=maptable, folderpath=filedir, catalog_label=catalog_label)
 
-    # Download the livneh 2016 VIC_ASCII Flux model data files
-    ftp_download_p(dailyVIClocations2013)
+    # return to the home directory
     os.chdir(homedir)
-    return(filedir)
+    return filedir
 
-def getClimateData_DailyVIC_CAN_livneh2013(homedir, mappingfile):
+
+def getClimateData_DailyMET_livneh2015(homedir, mappingfile, subdir='livneh2015/Daily_MET_1950_2013', catalog_label='livneh2015_MET'):
+    """
+    Get the Livneh el al., 2015 Daily Meteorology files of interest using the reference mapping file
+    """
+    # check and generate Daily MET livneh 2015 data directory
+    filedir=os.path.join(homedir, subdir)
+    ensure_dir(filedir)
     
     # generate table of lats and long coordinates
-    maptable = read_in_longlats(mappingfile)
+    maptable = pd.read_csv(mappingfile)
     
     # compile the longitude and latitude points
-    dailyVIClocations2013 = compile_VICASCII_Livneh2013_CAN_locations(maptable)
+    locations = compile_dailyMET_Livneh2015_locations(maptable)
 
-    # check and generate VIC_ASCII Flux model livneh 2016 data directory
-    filedir=homedir+'/livneh2013/Daily_VIC_1915_2011/'
-    ensure_dir(filedir)
-
-    # Download the livneh 2016 VIC_ASCII Flux model data files
-    ftp_download_p(dailyVIClocations2013)
+    # Download the files
+    ftp_download_p(locations)
+    
+    # update the mappingfile with the file catalog
+    addCatalogToMap(outfilepath=mappingfile, maptable=maptable, folderpath=filedir, catalog_label=catalog_label)
+    
+    # return to the home directory
     os.chdir(homedir)
-    return(filedir)
+    return filedir
 
-# read in the longitude and latitude points from the reference mapping file
-def getClimateData_DailyMET_livneh2013(homedir, mappingfile):
+
+def getClimateData_DailyMET_bcLivneh2013(homedir, mappingfile, subdir='livneh2013/Daily_MET_1915_2011/bc', catalog_label='livneh2013_METbc'):
+    """
+    Get the Livneh el al., 2013 bias corrected Daily Meteorology files of interest using the reference mapping file
+    """
+    # check and generate baseline_corrected livneh 2013 data directory
+    filedir=os.path.join(homedir, subdir)
+    ensure_dir(filedir)
     
     # generate table of lats and long coordinates
-    maptable = read_in_longlats(mappingfile)
+    maptable = pd.read_csv(mappingfile)
     
     # compile the longitude and latitude points
-    dailyMETlocations2013 = compile_dailyMET_Livneh2013_locations(maptable)
+    locations = compile_bc_Livneh2013_locations(maptable)
 
-    # check and generate VIC_ASCII Flux model livneh 2016 data directory
-    filedir=homedir+'/livneh2013/Daily_MET_1915_2011/'
-    ensure_dir(filedir)
+    # download the files
+    wget_download_p(locations)
 
-    # Download the livneh 2016 VIC_ASCII Flux model data files
-    ftp_download_p(dailyMETlocations2013)
+    # update the mappingfile with the file catalog
+    addCatalogToMap(outfilepath=mappingfile, maptable=maptable, folderpath=filedir, catalog_label=catalog_label)
+    
+    # return to the home directory
     os.chdir(homedir)
-    return(filedir)
+    return filedir
 
-def getClimateData_DailyMET_livneh2015(homedir, mappingfile):
+
+def getClimateData_DailyVIC_livneh2013(homedir, mappingfile, subdir='livneh2013/Daily_VIC_1915_2011', catalog_label='livneh2013_VIC'):
+    """
+    Get the Livneh el al., 2013 Daily VIC files of interest using the reference mapping file
+    """
+    # FIRST RUN
+    # check and generate VIC_ASCII Flux model livneh 2013 data directory
+    filedir=os.path.join(homedir, subdir)
+    ensure_dir(filedir)
     
     # generate table of lats and long coordinates
-    maptable = read_in_longlats(mappingfile)
+    maptable = pd.read_csv(mappingfile)
+
+    # compile the longitude and latitude points for USA
+    locations = compile_VICASCII_Livneh2013_USA_locations(maptable)
+
+    # Download the files
+    ftp_download_p(locations)
+    
+    # update the mappingfile with the file catalog
+    addCatalogToMap(outfilepath=mappingfile, maptable=maptable, folderpath=filedir, catalog_label=catalog_label)
+    
+    
+    # SECOND RUN
+    # read in the subset of missing locations for a second run-through for the Canada webservice
+    maptable2 = pd.read_csv(mappingfile)
+    maptable2 = maptable2.loc[pd.isnull(maptable2[catalog_label]),:].reset_index(drop=True)
+    locations = compile_VICASCII_Livneh2013_CAN_locations(maptable2)
+    
+    # Download the files
+    ftp_download_p(locations)
+    
+    # update the mappingfile with the file catalog
+    addCatalogToMap(outfilepath=mappingfile, maptable=maptable, folderpath=filedir, catalog_label=catalog_label)
+
+    # return to the home directory
+    os.chdir(homedir)
+    return filedir
+
+
+def getClimateData_DailyVIC_livneh2015(homedir, mappingfile, subdir='livneh2015/Daily_VIC_1950_2013', catalog_label='livneh2015_VIC'):
+    """
+    Get the Livneh el al., 2015 Daily VIC files of interest using the reference mapping file
+    """
+    # check and generate Daily VIC.ASCII Flux model livneh 2015 data directory
+    filedir=os.path.join(homedir, subdir)
+    ensure_dir(filedir)
+    
+    # generate table of lats and long coordinates
+    maptable = pd.read_csv(mappingfile)
     
     # compile the longitude and latitude points
-    dailyMETlocations2015 = compile_dailyMET_Livneh2015_locations(maptable)
+    locations = compile_VICASCII_Livneh2015_locations(maptable)
 
-    # check and generate VIC_ASCII Flux model livneh 2016 data directory
-    filedir=homedir+'/livneh2015/Daily_MET_1950_2013/'
-    ensure_dir(filedir)
-
-    # Download the livneh 2016 VIC_ASCII Flux model data files
-    ftp_download_p(dailyMETlocations2015)
+    # Download the files
+    ftp_download_p(locations)
+    
+    # update the mappingfile with the file catalog
+    addCatalogToMap(outfilepath=mappingfile, maptable=maptable, folderpath=filedir, catalog_label=catalog_label)
+    
+    # return to the home directory
     os.chdir(homedir)
-    return(filedir)
+    return filedir
 
 
-def getClimateData_DailyMET_bcLivneh2013(homedir, mappingfile):
+def getClimateData_DailyMET_rawWRF(homedir, mappingfile, subdir='Salathe2014/WWA_1950_2010/raw', catalog_label='Salathe2014_WRFraw'):
+    """
+    Get the Salathe el al., 2014 raw Daily WRF files of interest using the reference mapping file
+    """
+    # check and generate the Daily Meteorology raw WRF Salathe 2014 data directory
+    filedir=os.path.join(homedir, subdir)
+    ensure_dir(filedir)
     
     # read in the longitude and latitude points from the reference mapping file
-    maptable = read_in_longlats(mappingfile)
+    maptable = pd.read_csv(mappingfile)
     
     # compile the longitude and latitude points
-    dailyMET_bcLivneh_locations2013 = compile_bc_Livneh2013_locations(maptable)
-
-    # check and generate baseline_corrected livneh2013 data directory
-    filedir=homedir+'/livneh2013/Daily_MET_1915_2011/bc/'
-    ensure_dir(filedir)
+    locations = compile_wrfnnrp_raw_Salathe2014_locations(maptable)
 
     # download the data
-    wget_download_p(dailyMET_bcLivneh_locations2013)
+    wget_download_p(locations)
+    
+    # update the mappingfile with the file catalog
+    addCatalogToMap(outfilepath=mappingfile, maptable=maptable, folderpath=filedir, catalog_label=catalog_label)
+    
+    # return to the home directory
     os.chdir(homedir)
-    return(filedir)
+    return filedir
 
-# read in the longitude and latitude points from the reference mapping file
-def getClimateData_DailyVIC_livneh2015(homedir, mappingfile):
-    
-    # generate table of lats and long coordinates
-    maptable = read_in_longlats(mappingfile)
-    
-    # compile the longitude and latitude points
-    dailyVIClocations2015 = compile_VICASCII_Livneh2015_locations(maptable)
 
-    # check and generate VIC_ASCII Flux model livneh 2016 data directory
-    filedir=homedir+'/livneh2015/Daily_VIC_1950_2013/'
+def getClimateData_DailyMET_bcWRF(homedir, mappingfile, subdir='Salathe2014/WWA_1950_2010/bc', catalog_label='Salathe2014_WRFbc'):
+    """
+    Get the Salathe el al., 2014 bias corrected Daily WRF files of interest using the reference mapping file
+    """
+    # check and generate the Daily Meteorology bias corrected WRF Salathe 2014 data directory
+    filedir=os.path.join(homedir, subdir)
     ensure_dir(filedir)
 
-    # Download the livneh 2016 VIC_ASCII Flux model data files
-    ftp_download_p(dailyVIClocations2015)
-    os.chdir(homedir)
-    return(filedir)
-
-
-# ### Get Daily Meteorological data from Livneh 2015
-# formerly 'getClimateData_DailyMET_Livneh2016.py'
-
-# In[ ]:
-
-# read in the longitude and latitude points from the reference mapping file
-def getClimateData_DailyMET_rawWRF(homedir, mappingfile):
-    
     # read in the longitude and latitude points from the reference mapping file
-    maptable = read_in_longlats(mappingfile)
+    maptable = pd.read_csv(mappingfile)
     
     # compile the longitude and latitude points
-    dailyMET_WRF_locations2014 = compile_wrfnnrp_raw_Salathe2014_locations(maptable)
-
-    # check and generate baseline_corrected livneh2013 data directory
-    filedir=homedir+'/Salathe2014/WWA_1950_2010/raw/'
-    ensure_dir(filedir)
+    locations = compile_wrfnnrp_bc_Salathe2014_locations(maptable)
 
     # download the data
-    wget_download_p(dailyMET_WRF_locations2014)
-    os.chdir(homedir)
-    return(filedir)
-
-
-def getClimateData_DailyMET_bcWRF(homedir, mappingfile):
+    wget_download_p(locations)
     
-    # read in the longitude and latitude points from the reference mapping file
-    maptable = read_in_longlats(mappingfile)
+    # update the mappingfile with the file catalog
+    addCatalogToMap(outfilepath=mappingfile, maptable=maptable, folderpath=filedir, catalog_label=catalog_label)
     
-    # compile the longitude and latitude points
-    dailyMET_WRF_locations2014 = compile_wrfnnrp_bc_Salathe2014_locations(maptable)
-
-    # check and generate baseline_corrected livneh2013 data directory
-    filedir=homedir+'/Salathe2014/WWA_1950_2010/bc/'
-    ensure_dir(filedir)
-
-    # download the data
-    wget_download_p(dailyMET_WRF_locations2014)
+    # return to the home directory
     os.chdir(homedir)
-    return(filedir)
+    return filedir
+
 
 # # Data Processing libraries
 
-# In[ ]:
+
+def filesWithPath(folderpath):
+    """
+    Create a list of filepaths for the files
+    """
+    files =[os.path.join(folderpath, eachfile) 
+            for eachfile in os.listdir(folderpath) 
+            if not eachfile.startswith('.') # exclude hidden files
+            and not os.path.isdir(eachfile)] # exclude subdirectories
+    return files
 
 
-# ## Define functions for reading-in downloaded files
+def compareonvar(map_df, colvar='all'):
+    # apply row-wise inclusion based on a subset of columns
+    if colvar is 'all':
+        # compare on all columns except the station info
+        df = map_df.loc[:, map_df.columns.drop(['FID','LAT','LONG_','ELEV'])]
+    else:
+        # compare on only the listed columns
+        df = map_df.loc[:,colvar]
+        
+    # include if there are no NA values present in row
+    row_ind = df.apply(lambda x: False if sum(pd.isnull(x))>0 else True, axis=1)
+    return map_df.loc[row_ind,:]
 
-# In[18]:
 
-# create a list of files with their paths to be added to the HydroShare resource.
-def compileContentfiles(directory):
-    files = []
-    filelist = os.listdir(directory) # the list of filenames
-    for eachfile in filelist:
-        files.append(directory + eachfile) # filepaths list
-    return(files)
-
-
-# Read in the mappingfile as a data frame
-def mappingfileToDF(mappingfile):
-    map_df= pd.read_csv(mappingfile)
-    map_df.columns = map_df.columns.map(lambda x:x.upper())
-
-    # Select for station, latitude, longitude, and elevation columns
-    if 'ELEV' in map_df.columns:
-        map_df = map_df[['FID','LAT','LONG_','ELEV']]
-    elif 'RASTERVALU' in map_df.columns:
-        map_df = map_df[['FID','LAT','LONG_','RASTERVALU']]
-
-    # Rename columns in climate locations dataframe
-    map_df.columns = ['station','latitude','longitude','elevation']
+def mappingfileToDF(mappingfile, colvar='all'):
+    # Read in the mappingfile as a data frame
+    map_df = pd.read_csv(mappingfile)
+    
+    # select rows (datafiles) based on the colvar(s) chosen, default is 
+    map_df = compareonvar(map_df=map_df, colvar=colvar)
     
     # compile summaries
-    print map_df[0:4]
-    print
-    print 'Number of climate stations:', len(map_df)
-    print 'Minimum elevation of climate stations:', np.min(map_df.elevation), 'm'
-    print 'Mean elevation of climate stations:', int(np.mean(map_df.elevation)), 'm'
-    print 'Maximum elevation of climate stations:', np.max(map_df.elevation), 'm'
+    print(map_df.head())
+          
+    print('Number of gridded data files:', len(map_df))
+    print('Minimum elevation: ', np.min(map_df.ELEV), 'm')
+    print('Mean elevation: ', int(np.mean(map_df.ELEV)), 'm')
+    print('Maximum elevation: ', np.max(map_df.ELEV), 'm')
     
-    return(map_df, len(map_df))
+    return map_df, len(map_df)
 
 
-# appends the folder path with the list of files within it
-def filesWithPath(filedir):
-    file_names=[]
-    listOfFiles = os.listdir(filedir)
-    for eachfile in listOfFiles:
-        # logical rule to exclude hidden files
-        if not eachfile.startswith('.'):
-            file_names.extend([os.path.join(filedir,eachfile)])
-    return(file_names)
+def read_in_all_files(map_df, dataset, file_start_date, file_end_date, subset_start_date, subset_end_date, file_colnames=['precip_mm','tmax_c', 'tmin_c', 'wind_m_s']):
+    # Read in files based on dataset.
+    # map_df should be subsetted to just the files that meet a comparison criteria between datasets
+    # the output df_dict would have FID, LAT, and LONG_ as keys, and the dataframe as the dictionary value
 
-# define a function to read in the met files. The start and end date of the data must be input into the function since it is not 
-# included in the raw data download.
-def read_in_all_met_files(file_names, file_start_date, file_end_date, subset_start_date, subset_end_date, n_stations):
-    
-    #initialize matrix and time sequence
-    met_daily=[]
-
-    met_daily_dates=pd.date_range(file_start_date, file_end_date, freq='D') # daily
+    # select the files to use
+    row_ind = map_df[dataset].apply(lambda x: not pd.isnull(x))
+    file_subset = map_df.loc[row_ind,['FID','LAT','LONG_','ELEV']+[dataset]]
     
     # Identify separator for files in the dataset
-    sample = pd.read_table(file_names[0], header=None, sep='\t', nrows=1)
-    if len(sample) != 1:
+    sample = pd.read_table(file_subset.loc[0,dataset], header=None, sep='\t', nrows=1)
+    if len(sample.columns) != 1:
         separator = '\t'
     else:
         separator = '\s+'
     
+    #initialize matrix and time sequence
+    df_dict=dict()
+    met_daily_dates=pd.date_range(file_start_date, file_end_date, freq='D') # daily
+        
     # import data for all climate stations
-    for j in range(0, n_stations):
-        met_daily.append(pd.read_table(file_names[j], header=None, sep=separator))
-        met_daily[j].columns=['precip_mm','tmax_c', 'tmin_c', 'wind_m_s']
+    for ind, row in file_subset.iterrows():
+        df_dict[tuple(row[['FID','LAT','LONG_']].tolist())] = pd.read_table(row[dataset], header=None, sep=separator, names=file_colnames)
         
         # set the index as the date
-        met_daily[j].set_index(met_daily_dates, inplace=True)
-        met_daily[j] = met_daily[j].ix[subset_start_date:subset_end_date]
+        df_dict[tuple(row[['FID','LAT','LONG_']].tolist())].set_index(met_daily_dates, inplace=True)
+        df_dict[tuple(row[['FID','LAT','LONG_']].tolist())] = df_dict[tuple(row[['FID','LAT','LONG_']].tolist())].ix[subset_start_date:subset_end_date]
         
-    # display first 10 lines of the first station's data frame
-    print met_daily[0][0:10]
-    return(met_daily)
+    # display first 10 lines of the last dataframe
+    print df_dict[tuple(row[['FID','LAT','LONG_']].tolist())].head(10)
+    return df_dict
+    
+
+# define a function to read in the met files. The start and end date of the data must be input into the function since it is not 
+# included in the raw data download.
+#def read_in_all_met_files(file_names, file_start_date, file_end_date, subset_start_date, subset_end_date, n_stations):
+#    
+#    #initialize matrix and time sequence
+#    met_daily=[]
+#    met_daily_dates=pd.date_range(file_start_date, file_end_date, freq='D') # daily
+#    
+#    # Identify separator for files in the dataset
+#    sample = pd.read_table(file_names[0], header=None, sep='\t', nrows=1)
+#    if len(sample) != 1:
+#        separator = '\t'
+#    else:
+#        separator = '\s+'
+#    
+#    # import data for all climate stations
+#    for j in range(0, n_stations):
+#        met_daily.append(pd.read_table(file_names[j], header=None, sep=separator))
+#        met_daily[j].columns=['precip_mm','tmax_c', 'tmin_c', 'wind_m_s']
+#        
+#        # set the index as the date
+#        met_daily[j].set_index(met_daily_dates, inplace=True)
+#        met_daily[j] = met_daily[j].ix[subset_start_date:subset_end_date]
+#        
+#    # display first 10 lines of the first station's data frame
+#    print met_daily[0][0:10]
+#    return(met_daily)
     
 
 
@@ -828,7 +886,7 @@ def aggregate_space_time_sum(VarTable, n_stations, start_date, end_date):
 
 # Determine dates (rows) and stations (columns). Number of stations 
 # is the same for each dataset but number of dates may be different
-def generateVarTables (listOfDates, listOfTables, n_stations):
+def generateVarTables (listOfDates, dictOfTables, n_stations):
     # NOTE: listOfTable must contain:
     # tmin_c
     # tmax_c
@@ -836,30 +894,28 @@ def generateVarTables (listOfDates, listOfTables, n_stations):
     # wind_m_s
     
     len_listOfDates=len(listOfDates) # number of dates
-    station_list=range(0, n_stations) # list of stations number
     
     # Create arrays of for each variable of interest (Tmin, Tmax, Precip).
-    # Rows are dates of analysis and columns are the station number
-    temp_min_np=np.empty([len_listOfDates,n_stations])
-    temp_max_np=np.empty([len_listOfDates,n_stations])
-    precip_np=np.empty([len_listOfDates,n_stations])
-    wind_np=np.empty([len_listOfDates,n_stations])
+    temp_min_df=pd.DataFrame(pd.nan, columns=sorted(dictOfTables.keys()), index=listOfDates)
+    temp_max_df=pd.DataFrame()
+    precip_df=pd.DataFrame()
+    wind_df=pd.DataFrame()
     
     # fill in each array with values from each station
-    for i in station_list:
-        temp_min_np[:,i]=listOfTables[i].tmin_c.values.astype(float)
-        temp_max_np[:,i]=listOfTables[i].tmax_c.values.astype(float)
-        precip_np[:,i]=listOfTables[i].precip_mm.values.astype(float)
-        wind_np[:,i]=listOfTables[i].wind_m_s.values.astype(float)
+    for i in sorted(dictOfTables.keys()):
+        temp_min_df[i]=dictOfTables[i].tmin_c.values.astype(float)
+        temp_max_df[i]=dictOfTables[i].tmax_c.values.astype(float)
+        precip_df[i]=dictOfTables[i].precip_mm.values.astype(float)
+        wind_df[i]=dictOfTables[i].wind_m_s.values.astype(float)
         
     # generate each variable dataframe with rows as dates and columns as stations
-    temp_min_df=pd.DataFrame(temp_min_np, columns=station_list, index=listOfDates)    
-    temp_max_df=pd.DataFrame(temp_max_np, columns=station_list, index=listOfDates)    
-    precip_df=pd.DataFrame(precip_np, columns=station_list, index=listOfDates)    
-    wind_df=pd.DataFrame(wind_np, columns=station_list, index=listOfDates)
+    temp_min_df=pd.DataFrame(temp_min_np, columns=sorted(dictOfTables.keys()), index=listOfDates)    
+    temp_max_df=pd.DataFrame(temp_max_np, columns=sorted(dictOfTables.keys()), index=listOfDates)    
+    precip_df=pd.DataFrame(precip_np, columns=sorted(dictOfTables.keys()), index=listOfDates)    
+    wind_df=pd.DataFrame(wind_np, columns=sorted(dictOfTables.keys()), index=listOfDates)
     
     # Create average temperature data frame as the average of Tmin and Tmax
-    temp_avg_df=pd.DataFrame((temp_min_np+temp_max_np)/2, columns=station_list, index=listOfDates)
+    temp_avg_df=pd.DataFrame((temp_min_np+temp_max_np)/2, columns=sorted(dictOfTables.keys()), index=listOfDates)
     
     # generate each variable dataframe with rows as dates and columns as stations
     
@@ -916,6 +972,7 @@ def multigroupMeans(VarTable, n_stations, start_date, end_date):
            meanallyear_daily,
            anom_year_daily)
 
+
 def specialTavgMeans(VarTable):
     Var_daily = VarTable.loc[start_date:end_date, range(0,n_stations)]
     
@@ -935,10 +992,6 @@ def specialTavgMeans(VarTable):
           meanpermonth_daily,
           meanallpermonth_daily,
           anom_month_daily)
-
-#HIDE THIS CODE IN OGH
-
-# ADD NOTES TO EVERY CELL ON WHAT HAPPENED - DID IT RUN SUCCCESSFULLY
 
 
 # Calculate means by 8 different methods
@@ -979,42 +1032,42 @@ def aggregate_space_time_average(VarTable, n_stations, elev_min_station, elev_mi
            meanallyear_daily,
            anom_year_daily)
 
-def aggregate_space_time_sum(VarTable, n_stations, start_date, end_date):
-    Var_daily = VarTable.loc[start_date:end_date, range(0,n_stations)]
-    
-    # Average precipitation per month at each station
-    permonth_daily=Var_daily.groupby(pd.TimeGrouper("M")).sum()
-    
-    # Average precipitation per month averaged at all stations
-    meanpermonth_daily=permonth_daily.mean(axis=1)
-    
-    # Average monthly precipitation averaged at all stations
-    meanmonth_daily= meanpermonth_daily.groupby(meanpermonth_daily.index.month).mean()
-    
-    return(Var_daily,
-          permonth_daily,
-          meanpermonth_daily,
-          meanmonth_daily)
+#def aggregate_space_time_sum(VarTable, n_stations, start_date, end_date):
+#    Var_daily = VarTable.loc[start_date:end_date, range(0,n_stations)]
+#    
+#    # Average precipitation per month at each station
+#    permonth_daily=Var_daily.groupby(pd.TimeGrouper("M")).sum()
+#    
+#    # Average precipitation per month averaged at all stations
+#    meanpermonth_daily=permonth_daily.mean(axis=1)
+#    
+#    # Average monthly precipitation averaged at all stations
+#    meanmonth_daily= meanpermonth_daily.groupby(meanpermonth_daily.index.month).mean()
+#    
+#    return(Var_daily,
+#          permonth_daily,
+#          meanpermonth_daily,
+#          meanmonth_daily)
 
-def specialTavgMeans(VarTable):
-    Var_daily = VarTable.loc[start_date:end_date, range(0,n_stations)]
-    
-    # Average temperature for each month at each station
-    permonth_daily=Var_daily.groupby(pd.TimeGrouper("M")).mean()
-    
-    # Average temperature each month averaged at all stations
-    meanpermonth_daily=permonth_daily.mean(axis=1)
-    
-    # Average monthly temperature for all stations
-    meanallpermonth_daily=meanpermonth_daily.mean(axis=0)
-    
-    # anomoly per year compared to average
-    anom_month_daily=(meanpermonth_daily-meanallpermonth_daily)/1000
-    
-    return(permonth_daily,
-          meanpermonth_daily,
-          meanallpermonth_daily,
-          anom_month_daily)
+#def specialTavgMeans(VarTable):
+#    Var_daily = VarTable.loc[start_date:end_date, range(0,n_stations)]
+#    
+#    # Average temperature for each month at each station
+#    permonth_daily=Var_daily.groupby(pd.TimeGrouper("M")).mean()
+#    
+#    # Average temperature each month averaged at all stations
+#    meanpermonth_daily=permonth_daily.mean(axis=1)
+#    
+#    # Average monthly temperature for all stations
+#    meanallpermonth_daily=meanpermonth_daily.mean(axis=0)
+#    
+#    # anomoly per year compared to average
+#    anom_month_daily=(meanpermonth_daily-meanallpermonth_daily)/1000
+#    
+#    return(permonth_daily,
+#          meanpermonth_daily,
+#          meanallpermonth_daily,
+#          anom_month_daily)
 
 def plotTavg(dictionary, loc_name, start_date, end_date):
     # Plot 1: Monthly temperature analysis of Livneh data
@@ -1121,13 +1174,14 @@ def plotPavg(dictionary, loc_name, start_date, end_date):
     plt.savefig('avg_monthly_precip'+str(loc_name)+'.png')
     plt.show()
     
-def sand_between_your_toes(gridclim_folder,
+    
+def gridclim_dict(gridclim_folder,
                   gridclimname,
                   loc_name,
                   mappingfile,
                   min_elev=None,
                   max_elev=None,
-                  file_start_date=None, 
+                  file_start_date=None,
                   file_end_date=None,
                   subset_start_date=None,
                   subset_end_date=None,
@@ -1135,14 +1189,14 @@ def sand_between_your_toes(gridclim_folder,
     # pipelined operation for assimilating data, processing it, and standardizing the plotting
     
     # generate the climate locations and n_stations
-    climate_locations_df, n_stations = mappingfileToDF(mappingfile)
+    climate_locations_df, n_stations = mappingfileToDF(mappingfile, colvar='all')
     
     # generate the climate station info
     if min_elev is None:
-        min_elev = climate_locations_df.elevation.min()
+        min_elev = climate_locations_df.ELEV.min()
     
     if max_elev is None:
-        max_elev = climate_locations_df.elevation.max()
+        max_elev = climate_locations_df.ELEV.max()
     
     # take liv2013 date set date range as default if file reference dates are not given
     if file_start_date is None:
@@ -1162,31 +1216,31 @@ def sand_between_your_toes(gridclim_folder,
         df_dict = dict()
     
     # assemble the stations
-    analysis_stations_info = climate_locations_df[(climate_locations_df.elevation >= min_elev) & (climate_locations_df.elevation <= max_elev)].sort_values(by='elevation', ascending=False)
+    analysis_stations_info = climate_locations_df[(climate_locations_df.ELEV >= min_elev) & (climate_locations_df.ELEV <= max_elev)].sort_values(by='ELEV', ascending=False)
 
     # the number of stations to include into the top and bottom elevation ranges
-    x = np.ceil(len(analysis_stations_info.elevation)*.33)
+    x = np.ceil(len(analysis_stations_info.ELEV)*.33)
 
     # Extract list of station numbers for indexing. Alternative, you can set the list of stations manually!
-    analysis_elev_max_station = analysis_stations_info.station.head(int(x)).tolist()
-    analysis_elev_min_station = analysis_stations_info.station.tail(int(x)).tolist()
-    analysis_elev_mid_station = [k for k in analysis_stations_info.station if k not in analysis_elev_max_station + analysis_elev_min_station]
+    analysis_elev_max_station = analysis_stations_info.FID.head(int(x)).tolist()
+    analysis_elev_min_station = analysis_stations_info.FID.tail(int(x)).tolist()
+    analysis_elev_mid_station = [k for k in analysis_stations_info.FID if k not in analysis_elev_max_station + analysis_elev_min_station]
 
-    analysis_elev_max = analysis_stations_info.elevation.max() # maximum elevaiton of stations in analysis
-    analysis_elev_max_cutoff = analysis_stations_info.elevation.head(int(x)).min()
-    analysis_elev_min_cutoff = analysis_stations_info.elevation.tail(int(x)).max()    
-    analysis_elev_min = analysis_stations_info.elevation.min() # minimum elevaiton of stations in analysis
+    analysis_elev_max = analysis_stations_info.ELEV.max() # maximum elevaiton of stations in analysis
+    analysis_elev_max_cutoff = analysis_stations_info.ELEV.head(int(x)).min()
+    analysis_elev_min_cutoff = analysis_stations_info.ELEV.tail(int(x)).max()    
+    analysis_elev_min = analysis_stations_info.ELEV.min() # minimum elevaiton of stations in analysis
     
     # create list of dataframe
-    all_daily = read_in_all_met_files(file_names=filesWithPath(gridclim_folder),
-                                          file_start_date=file_start_date,
-                                          file_end_date=file_end_date, 
-                                          subset_start_date=subset_start_date,
-                                          subset_end_date=subset_end_date, 
-                                          n_stations=n_stations)
+    all_daily = read_in_all_files(map_df=climate_locations_df,
+                                  dataset=gridclim_folder,
+                                  file_start_date=file_start_date,
+                                  file_end_date=file_end_date, 
+                                  subset_start_date=subset_start_date,
+                                  subset_end_date=subset_end_date)
     
     # create datetime series
-    all_daily_dates=list(all_daily[0].index)
+    all_daily_dates=list(all_daily[all_daily.keys()[0]].index)
     
     # generate the variable dataframes for Livneh 2013
     [temp_min,
@@ -1230,8 +1284,8 @@ def sand_between_your_toes(gridclim_folder,
     df_dict['analysis_elev_max'] = analysis_elev_max
     df_dict['analysis_elev_max_cutoff'] = analysis_elev_max_cutoff
     df_dict['analysis_elev_min_cutoff'] = analysis_elev_min_cutoff
-    #plotTavg(df_dict, loc_name,start_date=subset_start_date, end_date=subset_end_date)
-    #plotPavg(df_dict, loc_name,start_date=subset_start_date, end_date=subset_end_date)
+    plotTavg(df_dict, loc_name,start_date=subset_start_date, end_date=subset_end_date)
+    plotPavg(df_dict, loc_name,start_date=subset_start_date, end_date=subset_end_date)
     
     return df_dict
 
@@ -1362,7 +1416,7 @@ def monthlyBiasCorrection_deltaTratioP_Livneh_METinput(homedir, mappingfile, Bia
     print('this device will now self-destruct.')
     print('just kidding.')
     
-def makebelieve_global(homedir,
+def monthlyBiasCorrection_WRFlongtermmean_elevationbins_METinput(homedir,
                                                  mappingfile,
                                                  BiasCorr,
                                                  lowrange='0to1000m', LowElev=range(0,1000),
@@ -1754,3 +1808,94 @@ def plot_meanTmax(dictionary, loc_name, start_date, end_date):
     plt.title(str(loc_name)+'\nMaximum Temperature\n Years: '+str(start_date.year)+'-'+str(end_date.year)+'; Elevation: '+str(dictionary['analysis_elev_min'])+'-'+str(dictionary['analysis_elev_max'])+'m', fontsize=16)
     plt.savefig('monthly_Tmax'+str(loc_name)+'.png')
     plt.show()
+    
+    
+def renderWatershed(shapefile):
+    fig = plt.figure(figsize=(10,5), dpi=1000)
+    ax1 = plt.subplot2grid((1,1),(0,0))
+
+    # generate the polygon color-scheme
+    cmap = mpl.cm.get_cmap('coolwarm')
+    norm = mpl.colors.Normalize(0, 1)
+    color_producer = mpl.cm.ScalarMappable(norm=norm, cmap=cmap)
+
+    # calculate bounding box based on the watershed shapefile
+    watershed = fiona.open(shapefile)
+    minx, miny, maxx, maxy = watershed.bounds
+    w, h = maxx - minx, maxy - miny
+
+    # watershed
+    ptchs=[PolygonPatch(shape(pol['geometry']), fc='pink', ec='pink', linewidth=0) for pol in watershed]
+    watershed.close()
+
+    # generate basemap
+    m = Basemap(projection='merc',
+                ellps='WGS84',
+                epsg=4326,
+                llcrnrlon=minx - 1 * w,
+                llcrnrlat=miny - 1 * h,
+                urcrnrlon=maxx + 1 * w,
+                urcrnrlat=maxy + 1 * h,
+                resolution='l',
+                ax=ax1)
+    m.arcgisimage(service='World_Physical_Map', xpixels=10000)
+
+    # generate the collection of Patches
+    coll = PatchCollection(ptchs, cmap=cmap, match_original=True)
+    ax1.add_collection(coll)
+    coll.set_alpha(0.4)
+
+    # save image
+    plt.savefig('watershed_topo.png')
+    plt.show()
+    
+
+def renderPointsInShape(shapefile, NAmer, mappingfile, colvar=['livneh2013_MET','Salathe2014_WRFraw'], outfilepath='oghcat_Livneh_Salathe.png'):
+
+    fig = plt.figure(figsize=(10,5), dpi=1000)
+    ax1 = plt.subplot2grid((1,1),(0,0))
+
+    # generate the polygon color-scheme
+    cmap = mpl.cm.get_cmap('coolwarm')
+    norm = mpl.colors.Normalize(0, 1)
+    color_producer = mpl.cm.ScalarMappable(norm=norm, cmap=cmap)
+
+    # calculate bounding box based on the watershed shapefile
+    watershed = fiona.open(shapefile)
+    minx, miny, maxx, maxy = watershed.bounds
+    w, h = maxx - minx, maxy - miny
+
+    # watershed
+    ptchs=[]
+    for pol in watershed:
+        watershed_shade = color_producer.to_rgba(0.5)
+        ptchs.append(PolygonPatch(shape(pol['geometry']), fc=watershed_shade, ec=watershed_shade, linewidth=0))
+    watershed.close()
+
+    # generate basemap
+    m = Basemap(projection='merc',
+                ellps='WGS84',
+                epsg=4326,
+                llcrnrlon=minx - 1 * w,
+                llcrnrlat=miny - 1 * h,
+                urcrnrlon=maxx + 1 * w,
+                urcrnrlat=maxy + 1 * h,
+                resolution='l',
+                ax=ax1)
+    m.arcgisimage(service='Canvas/World_Dark_Gray_Base', xpixels=10000)
+
+    # generate the collection of Patches
+    coll = PatchCollection(ptchs, cmap=cmap, match_original=True)
+    ax1.add_collection(coll)
+    coll.set_alpha(0.4)
+
+    # gridded points
+    gpoints = ogh.readShapefileTable(NAmer)
+    ax1.scatter(gpoints['Long'], gpoints['Lat'], alpha=0.4, c=color_producer.to_rgba(0))
+
+    # catalog
+    cat, n_stations = ogh.mappingfileToDF(mappingfile, colvar=colvar)
+    ax1.scatter(cat['LONG_'], cat['LAT'], alpha=0.4, c=color_producer.to_rgba(1))
+
+    # save image
+    plt.savefig(outfilepath)
